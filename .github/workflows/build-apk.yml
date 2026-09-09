@@ -11,6 +11,9 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      issues: write
     steps:
       - name: Check out the repo
         uses: actions/checkout@v4
@@ -41,10 +44,30 @@ jobs:
         run: npx cap sync android
 
       - name: Build debug APK
+        id: gradle_build
         working-directory: android
         run: |
           chmod +x gradlew
-          ./gradlew assembleDebug --no-daemon
+          set +e
+          ./gradlew assembleDebug --no-daemon --stacktrace > /tmp/gradle.log 2>&1
+          code=$?
+          set -e
+          tail -n 400 /tmp/gradle.log
+          echo "exit_code=$code" >> "$GITHUB_OUTPUT"
+
+      - name: Post build log if it failed
+        if: steps.gradle_build.outputs.exit_code != '0'
+        run: |
+          tail -c 55000 /tmp/gradle.log > /tmp/gradle_tail.log
+          jq -n --arg title "CI build log: ${{ github.sha }}" \
+                --rawfile body /tmp/gradle_tail.log \
+                '{title: $title, body: ("```\n" + $body + "\n```")}' > /tmp/issue.json
+          curl -s -X POST \
+            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${{ github.repository }}/issues" \
+            -d @/tmp/issue.json
+          exit 1
 
       - name: Upload APK as a build artifact
         uses: actions/upload-artifact@v4
