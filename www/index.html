@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
+<title>Polylex — translate & define</title>
+<meta name="theme-color" content="#23201a">
+<link rel="manifest" href="./manifest.json">
+<link rel="icon" href="./icons/icon-192.png">
+<link rel="apple-touch-icon" href="./icons/icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,500;0,9..144,600;1,9..144,500&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:ital@1&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="./css/style.css">
+</head>
+<body>
+
+<header class="masthead">
+  <p class="kicker">translate &amp; define</p>
+  <h1>Polylex</h1>
+</header>
+
+<nav class="tabs" role="tablist">
+  <button class="tab" data-mode="translate" role="tab" aria-selected="true">Translate</button>
+  <button class="tab" data-mode="dictionary" role="tab" aria-selected="false">Dictionary</button>
+</nav>
+
+<main>
+  <!-- ===================== TRANSLATE ===================== -->
+  <section id="panel-translate" class="panel active">
+    <form id="translate-form">
+      <div class="field-row">
+        <select id="lang-from" class="lang-select" aria-label="Source language"></select>
+        <button type="button" id="swap-langs" class="swap-btn" aria-label="Swap languages">⇄</button>
+        <select id="lang-to" class="lang-select" aria-label="Target language"></select>
+      </div>
+
+      <textarea id="translate-input" class="entry-input" rows="3" maxlength="500"
+        placeholder="Type something to translate…"></textarea>
+      <div class="char-count"><span id="translate-char-count">0 / 500</span></div>
+
+      <div class="action-row">
+        <button type="submit" id="translate-btn" class="btn-primary">Translate</button>
+        <span id="translate-spinner" class="spinner" aria-hidden="true"></span>
+      </div>
+    </form>
+
+    <p id="translate-state" class="state-msg hidden"></p>
+
+    <div id="translate-result" class="entry-card hidden">
+      <p id="translate-output" class="translation-output"></p>
+      <div class="meta-row">
+        <button class="entry-audio-btn" data-text="" data-lang="">▷ Listen</button>
+        <button class="copy-btn">Copy</button>
+      </div>
+    </div>
+
+    <div class="history">
+      <p class="history-title">recently translated</p>
+      <div id="translate-history-list" class="history-list"></div>
+    </div>
+  </section>
+
+  <!-- ===================== DICTIONARY ===================== -->
+  <section id="panel-dictionary" class="panel">
+    <form id="dictionary-form">
+      <input id="dictionary-input" class="entry-input" type="text" autocapitalize="none"
+        placeholder="Look up an English word…">
+      <div class="action-row">
+        <button type="submit" id="dictionary-btn" class="btn-primary">Look up</button>
+        <span id="dictionary-spinner" class="spinner" aria-hidden="true"></span>
+      </div>
+    </form>
+
+    <p id="dictionary-state" class="state-msg hidden"></p>
+
+    <div id="dictionary-result" class="entry-card hidden">
+      <p id="dict-headword" class="entry-headword"></p>
+      <p id="dict-phonetic" class="entry-phonetic"></p>
+      <button id="dict-audio-btn" class="entry-audio-btn hidden">▷ Pronounce</button>
+      <div id="dict-meanings"></div>
+    </div>
+
+    <div class="history">
+      <p class="history-title">previously consulted</p>
+      <div id="dictionary-history-list" class="history-list"></div>
+    </div>
+  </section>
+</main>
+
+<footer class="attribution">
+  Translations via MyMemory · Definitions via dictionaryapi.dev
+</footer>
+
+<script src="./js/app.js"></script>
+</body>
+</html>

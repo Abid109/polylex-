@@ -1,0 +1,9 @@
+{
+  "appId": "com.abidabrar.polylex",
+  "appName": "Polylex",
+  "webDir": "www",
+  "backgroundColor": "#23201a",
+  "android": {
+    "allowMixedContent": false
+  }
+}
