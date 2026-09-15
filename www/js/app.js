@@ -106,7 +106,7 @@ async function runTranslate() {
 
 /* ---------------- dictionary ---------------- */
 async function runDictionary() {
-  const word = $("#dictionary-input").value.trim();
+  const word = $("#dictionary-input").value.trim().toLowerCase();
   const card = $("#dictionary-result");
   const stateMsg = $("#dictionary-state");
   const btn = $("#dictionary-btn");
