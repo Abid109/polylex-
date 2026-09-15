@@ -29,13 +29,36 @@ jobs:
         with:
           node-version: "22"
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Install required SDK packages
+      - name: Set up Android SDK packages
+        id: sdk_setup
         run: |
-          yes | sdkmanager --licenses || true
-          sdkmanager "platform-tools" "platforms;android-36" "build-tools;36.0.0"
+          set +e
+          {
+            echo "ANDROID_HOME=$ANDROID_HOME"
+            echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
+            SDKMANAGER=$(command -v sdkmanager || find "$ANDROID_HOME" "$ANDROID_SDK_ROOT" -maxdepth 4 -name sdkmanager 2>/dev/null | head -n1)
+            echo "Using sdkmanager: $SDKMANAGER"
+            yes | "$SDKMANAGER" --licenses
+            "$SDKMANAGER" "platform-tools" "platforms;android-36" "build-tools;36.0.0"
+          } > /tmp/sdk.log 2>&1
+          code=$?
+          set -e
+          tail -n 200 /tmp/sdk.log
+          echo "exit_code=$code" >> "$GITHUB_OUTPUT"
+
+      - name: Post SDK setup log if it failed
+        if: steps.sdk_setup.outputs.exit_code != '0'
+        run: |
+          tail -c 55000 /tmp/sdk.log > /tmp/sdk_tail.log
+          jq -n --arg title "CI SDK setup log: ${{ github.sha }}" \
+                --rawfile body /tmp/sdk_tail.log \
+                '{title: $title, body: ("```\n" + $body + "\n```")}' > /tmp/issue.json
+          curl -s -X POST \
+            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${{ github.repository }}/issues" \
+            -d @/tmp/issue.json
+          exit 1
 
       - name: Install web-app / Capacitor dependencies
         run: npm install
