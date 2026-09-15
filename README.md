@@ -9,7 +9,7 @@ a GitHub Actions workflow already included in this repo.
 Needs an internet connection to work — translations and definitions are
 fetched live from two free, keyless APIs:
 - Translation: [MyMemory](https://mymemory.translated.net/doc/spec.php)
-- Dictionary: [dictionaryapi.dev](https://dictionaryapi.dev) (English only)
+- Dictionary: [freedictionaryapi.com](https://freedictionaryapi.com) (English only), with [Datamuse](https://www.datamuse.com/api/) as an automatic fallback if the primary is unreachable
 
 ## 1. Put this on GitHub
 

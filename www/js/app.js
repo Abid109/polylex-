@@ -2,8 +2,12 @@
    Polylex — app logic
    Translation: MyMemory Translated API (no key required)
      https://mymemory.translated.net/doc/spec.php
-   Dictionary:  Free Dictionary API (English, no key required)
-     https://dictionaryapi.dev/
+   Dictionary:  freedictionaryapi.com (primary, no key required)
+     https://freedictionaryapi.com/
+   with Datamuse as a fallback if the primary is unreachable
+     https://www.datamuse.com/api/
+   (the older api.dictionaryapi.dev has been unreliable for months
+   and was dropped for that reason)
    Both are called directly from the WebView over HTTPS, so the
    app needs an internet connection to return results.
    ============================================================ */
@@ -105,6 +109,73 @@ async function runTranslate() {
 }
 
 /* ---------------- dictionary ---------------- */
+async function fetchWithTimeout(url, ms = 8000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), ms);
+  try {
+    return await fetch(url, { signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function buildMeaningsFromPrimary(data) {
+  return (data.entries || []).map((entry) => ({
+    partOfSpeech: entry.partOfSpeech || "",
+    senses: (entry.senses || []).slice(0, 5).map((s) => ({
+      definition: s.definition || "",
+      example: s.examples?.[0] || "",
+      synonyms: s.synonyms || [],
+    })),
+  }));
+}
+
+const DATAMUSE_POS_LABELS = { n: "noun", v: "verb", adj: "adjective", adv: "adverb", u: "other" };
+
+function buildMeaningsFromFallback(entry) {
+  const groups = new Map();
+  (entry.defs || []).forEach((line) => {
+    const [code, ...rest] = line.split("\t");
+    const label = DATAMUSE_POS_LABELS[code] || code || "definition";
+    const text = rest.join("\t") || line;
+    if (!groups.has(label)) groups.set(label, []);
+    groups.get(label).push({ definition: text, example: "", synonyms: [] });
+  });
+  return Array.from(groups, ([partOfSpeech, senses]) => ({ partOfSpeech, senses: senses.slice(0, 5) }));
+}
+
+async function lookupPrimary(word) {
+  const url = `https://freedictionaryapi.com/api/v1/entries/en/${encodeURIComponent(word)}`;
+  const res = await fetchWithTimeout(url);
+  if (res.status === 404) return { notFound: true };
+  if (!res.ok) throw new Error("primary-bad-status");
+  const data = await res.json();
+  if (!data?.entries?.length) return { notFound: true };
+  const pronunciations = data.entries.flatMap((e) => e.pronunciations || []);
+  const phonetic = pronunciations.find((p) => p.text && !p.text.startsWith("http"))?.text || "";
+  const audio = pronunciations.find((p) => p.text?.startsWith("http"))?.text || "";
+  return {
+    headword: data.word || word,
+    phonetic,
+    audio,
+    meanings: buildMeaningsFromPrimary(data),
+  };
+}
+
+async function lookupFallback(word) {
+  const url = `https://api.datamuse.com/words?sp=${encodeURIComponent(word)}&md=d&max=1`;
+  const res = await fetchWithTimeout(url);
+  if (!res.ok) throw new Error("fallback-bad-status");
+  const [entry] = await res.json();
+  if (!entry || entry.word !== word || !entry.defs?.length) return { notFound: true };
+  return {
+    headword: entry.word,
+    phonetic: "",
+    audio: "",
+    meanings: buildMeaningsFromFallback(entry),
+  };
+}
+
 async function runDictionary() {
   const word = $("#dictionary-input").value.trim().toLowerCase();
   const card = $("#dictionary-result");
@@ -120,24 +191,37 @@ async function runDictionary() {
   card.classList.add("hidden");
 
   try {
-    const url = `https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(word)}`;
-    const res = await fetch(url);
-    if (res.status === 404) {
+    let entry = null;
+    let notFound = false;
+
+    for (const lookup of [lookupPrimary, lookupFallback]) {
+      try {
+        const res = await lookup(word);
+        if (res.notFound) {
+          notFound = true;
+          continue; // this source doesn't have it — try the next one before giving up
+        }
+        entry = res;
+        break;
+      } catch (err) {
+        // this source is unreachable — fall through to the next one
+      }
+    }
+
+    if (entry) {
+      renderDictionaryEntry(entry);
+      card.classList.remove("hidden");
+      pushHistory("dictionary", { word });
+      renderHistory("dictionary");
+    } else if (notFound) {
       stateMsg.textContent = `No entry for "${word}". Check the spelling, or try another word.`;
       stateMsg.classList.remove("hidden");
       stateMsg.classList.add("error");
-      return;
+    } else {
+      stateMsg.textContent = "Couldn't reach the dictionary service. Check your connection and try again.";
+      stateMsg.classList.remove("hidden");
+      stateMsg.classList.add("error");
     }
-    if (!res.ok) throw new Error("network");
-    const [entry] = await res.json();
-    renderDictionaryEntry(entry);
-    card.classList.remove("hidden");
-    pushHistory("dictionary", { word });
-    renderHistory("dictionary");
-  } catch (err) {
-    stateMsg.textContent = "Couldn't reach the dictionary service. Check your connection and try again.";
-    stateMsg.classList.remove("hidden");
-    stateMsg.classList.add("error");
   } finally {
     btn.disabled = false;
     spinner.classList.remove("active");
@@ -145,56 +229,55 @@ async function runDictionary() {
 }
 
 function renderDictionaryEntry(entry) {
-  $("#dict-headword").textContent = entry.word;
+  $("#dict-headword").textContent = entry.headword;
+  $("#dict-phonetic").textContent = entry.phonetic;
 
-  const phoneticText = entry.phonetic || entry.phonetics?.find((p) => p.text)?.text || "";
-  $("#dict-phonetic").textContent = phoneticText;
-
-  const audioEntry = entry.phonetics?.find((p) => p.audio);
   const audioBtn = $("#dict-audio-btn");
-  if (audioEntry?.audio) {
+  if (entry.audio) {
     audioBtn.classList.remove("hidden");
-    audioBtn.dataset.audio = audioEntry.audio.startsWith("http") ? audioEntry.audio : `https:${audioEntry.audio}`;
+    audioBtn.dataset.audio = entry.audio;
   } else {
     audioBtn.classList.add("hidden");
   }
 
   const container = $("#dict-meanings");
   container.innerHTML = "";
-  (entry.meanings || []).forEach((meaning) => {
+  entry.meanings.forEach(({ partOfSpeech, senses }) => {
     const block = document.createElement("div");
     block.className = "pos-block";
 
     const label = document.createElement("p");
     label.className = "pos-label";
-    label.textContent = meaning.partOfSpeech;
+    label.textContent = partOfSpeech;
     block.append(label);
 
     const list = document.createElement("ol");
     list.className = "sense-list";
-    (meaning.definitions || []).slice(0, 5).forEach((def) => {
+    senses.forEach((s) => {
       const li = document.createElement("li");
-      li.textContent = def.definition;
-      if (def.example) {
+      li.textContent = s.definition;
+      if (s.example) {
         const ex = document.createElement("span");
         ex.className = "sense-example";
-        ex.textContent = `“${def.example}”`;
+        ex.textContent = `“${s.example}”`;
         li.append(ex);
       }
       list.append(li);
     });
     block.append(list);
 
-    if (meaning.synonyms?.length) {
+    const allSynonyms = [...new Set(senses.flatMap((s) => s.synonyms))];
+    if (allSynonyms.length) {
       const syn = document.createElement("p");
       syn.className = "synonyms";
-      syn.innerHTML = `<b>Synonyms:</b> ${meaning.synonyms.slice(0, 8).join(", ")}`;
+      syn.innerHTML = `<b>Synonyms:</b> ${allSynonyms.slice(0, 8).join(", ")}`;
       block.append(syn);
     }
 
     container.append(block);
   });
 }
+
 
 /* ---------------- history ---------------- */
 function pushHistory(kind, item) {
